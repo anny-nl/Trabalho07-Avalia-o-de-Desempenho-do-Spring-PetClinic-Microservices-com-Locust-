@@ -7,6 +7,8 @@ Medir e analisar o desempenho do sistema **Spring PetClinic – Microservices** 
 - Docker & Docker Compose
 - Python 3 + Locust
 - Spring PetClinic (versão microservices)
+- Locust (instalar com pip install locust).
+
 
 ---
 
