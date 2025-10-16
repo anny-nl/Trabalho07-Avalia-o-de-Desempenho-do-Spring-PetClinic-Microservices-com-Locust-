@@ -12,6 +12,9 @@ Medir e analisar o desempenho do sistema **Spring PetClinic – Microservices** 
 
 ---
 
+### Resumo
+
+
 ## Como executar
 
 ### 1. Clonar o projeto
