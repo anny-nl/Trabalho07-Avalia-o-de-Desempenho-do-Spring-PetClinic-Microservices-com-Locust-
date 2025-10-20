@@ -1,104 +1,103 @@
-# -*- coding: utf-8 -*-
-
-"""
-Script para popular a base de dados do Spring PetClinic Microservices.
-
-Este script utiliza a API Gateway para criar 'Owners' (donos) e seus 'Pets'.
-É necessário que a stack de microserviços esteja em execução.
-
-Pré-requisitos:
-- Instalar as bibliotecas 'requests' e 'faker'.
-  pip install requests faker
-"""
-
 import requests
 import random
 from faker import Faker
 from datetime import date
 
-# Inicializa o Faker para gerar dados fictícios em português do Brasil
+# Inicializa o Faker para gerar dados em português brasileiro
 fake = Faker('pt_BR')
 
-# URL base da API Gateway do PetClinic
-BASE_URL = "http://localhost:8080"
-CUSTOMERS_SERVICE_URL = f"{BASE_URL}/api/customer"
-VISITS_SERVICE_URL = f"{BASE_URL}/api/visit"
+# --- Constantes da API ---
+BASE_URL = "http://localhost:8080/api"
+OWNERS_URL = f"{BASE_URL}/customer/owners"
+PETS_URL = f"{BASE_URL}/customer/owners"
+VETS_URL = f"{BASE_URL}/vet/vets"  # <-- NOVO: URL para veterinários
 
+# --- Configurações de Geração de Dados ---
+TOTAL_OWNERS_TO_CREATE = 50
+MAX_PETS_PER_OWNER = 3
+TOTAL_VETS_TO_CREATE = 15 # <-- NOVO: Defina quantos veterinários criar
+OWNER_IDS_FILE = "owner_ids.txt"
 
-def criar_owner():
-    """Cria um novo owner (dono) com dados fictícios."""
+def create_owner():
+    """Cria um novo dono (owner) com dados fictícios."""
     owner_data = {
         "firstName": fake.first_name(),
         "lastName": fake.last_name(),
         "address": fake.street_address(),
         "city": fake.city(),
-        "telephone": fake.msisdn()[:11] # Garante que o telefone tenha no máximo 11 dígitos
+        "telephone": fake.msisdn()[:11]
     }
     try:
-        response = requests.post(f"{CUSTOMERS_SERVICE_URL}/owners", json=owner_data)
-        response.raise_for_status()  # Lança uma exceção para respostas de erro (4xx ou 5xx)
-        print(f"✅ Dono '{owner_data['firstName']} {owner_data['lastName']}' criado com sucesso.")
-        return response.json()
+        response = requests.post(OWNERS_URL, json=owner_data)
+        response.raise_for_status()
+        created_owner = response.json()
+        owner_id = created_owner.get("id")
+        print(f"✅ Dono '{created_owner['firstName']}' criado com sucesso (ID: {owner_id}).")
+        return owner_id
     except requests.exceptions.RequestException as e:
         print(f"❌ Erro ao criar dono: {e}")
         return None
 
-def obter_tipos_de_pet():
-    """Obtém os tipos de pet disponíveis na aplicação."""
-    try:
-        response = requests.get(f"{CUSTOMERS_SERVICE_URL}/pettypes")
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Erro ao obter tipos de pet: {e}")
-        return []
-
-def adicionar_pet_a_owner(owner_id, pet_types):
+def add_pet_to_owner(owner_id):
     """Adiciona um pet a um dono existente."""
-    if not pet_types:
-        print("⚠️ Não há tipos de pet disponíveis para criar um pet.")
-        return None
-
+    if not owner_id:
+        return
+    birth_date = fake.date_of_birth(minimum_age=1, maximum_age=15)
+    pet_types = ["cat", "dog", "lizard", "snake", "bird", "hamster"]
     pet_type = random.choice(pet_types)
     pet_data = {
         "name": fake.first_name(),
-        # Formato de data esperado pela API: YYYY/MM/DD
-        "birthDate": fake.date_of_birth(minimum_age=1, maximum_age=15).strftime('%Y/%m/%d'),
-        "typeId": pet_type["id"]
+        "birthDate": birth_date.strftime("%Y-%m-%d"),
+        "typeId": pet_types.index(pet_type) + 1
     }
-
+    url = f"{PETS_URL}/{owner_id}/pets"
     try:
-        response = requests.post(f"{CUSTOMERS_SERVICE_URL}/owners/{owner_id}/pets", json=pet_data)
+        response = requests.post(url, json=pet_data)
         response.raise_for_status()
-        print(f"  🐾 Pet '{pet_data['name']}' adicionado ao dono ID {owner_id}.")
-        return response.json()
+        print(f"  🐾 Pet '{pet_data['name']}' ({pet_type}) adicionado ao dono ID {owner_id}.")
     except requests.exceptions.RequestException as e:
-        print(f"  ❌ Erro ao adicionar pet: {e}")
-        return None
+        print(f"  ❌ Erro ao adicionar pet ao dono ID {owner_id}: {e.response.text}")
+
+# --- NOVA FUNÇÃO PARA CRIAR VETERINÁRIOS ---
+def create_vet():
+    """Cria um novo veterinário (vet) com dados fictícios."""
+    vet_data = {
+        "firstName": fake.first_name(),
+        "lastName": fake.last_name()
+        # Nota: Não estamos adicionando especialidades para simplificar.
+    }
+    try:
+        response = requests.post(VETS_URL, json=vet_data)
+        response.raise_for_status()
+        created_vet = response.json()
+        print(f"🩺 Veterinário(a) '{created_vet['firstName']}' criado(a) com sucesso (ID: {created_vet['id']}).")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Erro ao criar veterinário: {e}")
 
 if __name__ == "__main__":
-    print("--- Iniciando script para popular o banco de dados do PetClinic ---")
-
-    # Quantidade de donos a serem criados
-    NUMERO_DE_DONOS = 50
-    # Máximo de pets por dono
-    MAX_PETS_POR_DONO = 3
-
-    print("\nBuscando tipos de pets disponíveis...")
-    tipos_de_pet = obter_tipos_de_pet()
-    if tipos_de_pet:
-        print(f"Tipos encontrados: {[pt['name'] for pt in tipos_de_pet]}")
-    else:
-        print("Não foi possível continuar sem os tipos de pet. Abortando.")
-        exit(1)
-
-    print(f"\nCriando {NUMERO_DE_DONOS} donos e seus pets...")
-    for i in range(NUMERO_DE_DONOS):
-        novo_owner = criar_owner()
-        if novo_owner and "id" in novo_owner:
-            owner_id = novo_owner["id"]
-            num_pets = random.randint(0, MAX_PETS_POR_DONO)
+    print("--- Iniciando a população do banco de dados ---")
+    
+    # --- Seção de criação de Donos e Pets (sem alterações) ---
+    print("\n--- Fase 1: Criando Donos e Pets ---")
+    created_owner_ids = []
+    for i in range(TOTAL_OWNERS_TO_CREATE):
+        # print(f"\n--- Criando Dono {i+1}/{TOTAL_OWNERS_TO_CREATE} ---") # Removido para um log mais limpo
+        owner_id = create_owner()
+        if owner_id:
+            created_owner_ids.append(owner_id)
+            num_pets = random.randint(1, MAX_PETS_PER_OWNER)
             for _ in range(num_pets):
-                adicionar_pet_a_owner(owner_id, tipos_de_pet)
+                add_pet_to_owner(owner_id)
+    
+    if created_owner_ids:
+        with open(OWNER_IDS_FILE, "w") as f:
+            for owner_id in created_owner_ids:
+                f.write(f"{owner_id}\n")
+        print(f"\n✅ {len(created_owner_ids)} IDs de donos foram salvos em '{OWNER_IDS_FILE}'.")
 
-    print("\n--- Script de população de dados finalizado ---")
+    # --- NOVO: Seção de criação de Veterinários ---
+    print("\n--- Fase 2: Criando Veterinários ---")
+    for i in range(TOTAL_VETS_TO_CREATE):
+        create_vet()
+
+    print("\n--- População do banco de dados concluída! ---")
